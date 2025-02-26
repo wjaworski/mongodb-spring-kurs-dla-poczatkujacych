@@ -1,7 +1,13 @@
 package pl.jakubpradzynski.mongodb_basics.authors;
 
 import org.bson.types.ObjectId;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoOperations;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.aggregation.ConditionalOperators;
+import org.springframework.data.mongodb.core.aggregation.DateOperators;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
@@ -39,37 +45,58 @@ class AuthorsRepositoryImpl implements AuthorsRepository {
         this.mongoOperations = mongoOperations;
     }
 
-
     @Override
     public void save(Author author) {
-        // TODO Not implemented yet
+        mongoOperations.save(author);
     }
 
     @Override
     public Optional<Author> findById(ObjectId authorId) {
-        // TODO Not implemented yet
-        return Optional.empty();
+        return springAuthorsRepository.findById(authorId);
     }
 
     @Override
     public void deleteById(ObjectId authorId) {
-        // TODO Not implemented yet
+        springAuthorsRepository.deleteById(authorId);
     }
 
     @Override
     public void deleteAll() {
-        // TODO Not implemented yet
+        springAuthorsRepository.deleteAll();
     }
+
 
     @Override
     public List<Author> findByNationalityOrLiving(String nationality, boolean living) {
-        // TODO Not implemented yet
-        return Collections.emptyList();
+        Criteria dateOfDeathCriteria = living
+                ? Criteria.where("dateOfDeath").exists(false)
+                : Criteria.where("dateOfDeath").exists(true);
+        return mongoOperations.find(
+                Query.query(new Criteria().orOperator(
+                        Criteria.where("nationality").is(nationality),
+                        dateOfDeathCriteria
+                )).with(Sort.by(Sort.Direction.ASC, "dateOfBirth")),
+                Author.class
+        );
     }
+
 
     @Override
     public List<AuthorWithAge> calculateAuthorAges(Instant now) {
-        // TODO Not implemented yet
-        return Collections.emptyList();
+        var ageCalculator = DateOperators.DateDiff
+                .diffValueOf(ConditionalOperators.IfNull.ifNull("dateOfDeath").then(now), "year")
+                .toDateOf("dateOfBirth");
+        return mongoOperations.aggregate(
+                Aggregation.newAggregation(
+                        Aggregation
+                                .project("name", "surname")
+                                .and(ageCalculator)
+                                .as("age"),
+                        Aggregation.sort(Sort.Direction.DESC, "age")
+                ),
+                Author.class,
+                AuthorWithAge.class
+        ).getMappedResults();
     }
+
 }

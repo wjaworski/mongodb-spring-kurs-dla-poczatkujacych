@@ -2,7 +2,10 @@ package pl.jakubpradzynski.mongodb_basics.books;
 
 
 import org.bson.types.ObjectId;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoOperations;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.query.*;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
@@ -51,63 +54,88 @@ class BooksRepositoryImpl implements BooksRepository {
 
     @Override
     public void save(Book book) {
-        // TODO Not implemented yet
+        springBooksRepository.save(book);
     }
 
     @Override
     public Optional<Book> findById(ObjectId bookId) {
-        // TODO Not implemented yet
-        return Optional.empty();
+        return springBooksRepository.findById(bookId);
     }
 
     @Override
     public void deleteById(ObjectId bookId) {
-        // TODO Not implemented yet
+        springBooksRepository.deleteById(bookId);
     }
 
     @Override
     public void deleteAll() {
-        // TODO Not implemented yet
+        springBooksRepository.deleteAll();
     }
 
     @Override
     public void changeScores(ObjectId bookId, Double goodreads, Double lubimyczytac) {
-        // TODO Not implemented yet
+        mongoOperations.updateFirst(
+                Query.query(Criteria.where("_id").is(bookId)),
+                Update.update("score.goodreads", goodreads).set("score.lubimyczytac", lubimyczytac),
+                Book.class
+        );
     }
 
     @Override
     public void addAuthor(ObjectId bookId, ObjectId additionalAuthorId) {
-        // TODO Not implemented yet
+        mongoOperations.updateFirst(
+                Query.query(Criteria.where("_id").is(bookId)),
+                new Update().addToSet("authorIds", additionalAuthorId),
+                Book.class
+        );
     }
 
     @Override
     public List<Book> findByGenre(Genre genre) {
-        // TODO Not implemented yet
-        return Collections.emptyList();
+        return mongoOperations.find(
+                Query.query(Criteria.where("genres").in(genre)),
+                Book.class
+        );
     }
 
     @Override
     public int countByGenre(Genre genre) {
-        // TODO Not implemented yet
-        return 0;
+        return (int) mongoOperations.count(
+                Query.query(Criteria.where("genres").in(genre)),
+                Book.class
+        );
     }
 
     @Override
     public List<Book> findByScoresBiggerThen(double goodreadsScoreThreshold, double lubimyczytacScoreThreshold) {
-        // TODO Not implemented yet
-        return Collections.emptyList();
+        return mongoOperations.find(
+                Query.query(new Criteria().andOperator(
+                        Criteria.where("score.goodreads").gt(goodreadsScoreThreshold),
+                        Criteria.where("score.lubimyczytac").gt(lubimyczytacScoreThreshold)
+                )).with(Sort.by(Sort.Direction.ASC, "score.goodreads", "score.lubimyczytac")),
+                Book.class
+        );
     }
 
     @Override
     public List<BooksGroupedByPublisher> findAllGroupedByPublisher() {
-        // TODO Not implemented yet
-        return Collections.emptyList();
+        return mongoOperations
+                .aggregate(Aggregation.newAggregation(
+                        Aggregation.group("publisher")
+                                .addToSet("$$ROOT").as("books")
+                                .count().as("count"),
+                        Aggregation.sort(Sort.Direction.ASC, "_id")
+                ), Book.class, BooksGroupedByPublisher.class)
+                .getMappedResults();
     }
 
     @Override
     public List<Book> findByTextInDescription(String text) {
-        // TODO Not implemented yet
-        return Collections.emptyList();
+        return mongoOperations.find(
+                TextQuery.queryText(TextCriteria.forDefaultLanguage().matching(text)),
+                Book.class
+        );
+
     }
 }
 
